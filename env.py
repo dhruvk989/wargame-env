@@ -1,192 +1,157 @@
+import gym
+from gym import spaces
+import numpy as np
 import pygame
 import random
-import sys
-
-# Initialize Pygame
-pygame.init()
-
-# Set up the display
-display_info = pygame.display.Info()
-display_width = display_info.current_w
-display_height = display_info.current_h
-display = pygame.display.set_mode(
-    (display_width, display_height), pygame.FULLSCREEN)
-pygame.display.set_caption("Drone Wargame")
-
-# Load enemy and drone images
-brick_image = pygame.image.load("brick.PNG")
-enemy_image = pygame.image.load("enemy.png")
-drone_image = pygame.image.load("drone.png")
-
-# Resize the images
-brick_width = 50
-brick_height = 50
-enemy_width = 50
-enemy_height = 50
-drone_width = 70
-drone_height = 70
-brick_image = pygame.transform.scale(brick_image, (brick_width, brick_height))
-enemy_image = pygame.transform.scale(enemy_image, (enemy_width, enemy_height))
-drone_image = pygame.transform.scale(drone_image, (drone_width, drone_height))
-
-# Set up the drone
-drone_x = display_width // 2 - drone_width // 2
-drone_y = display_height - drone_height - 10
-drone_speed = 0.0  # Initialize the drone speed to 0.0
-
-# Set up the surveillance area points
-surveillance_points = {
-    'a': (200, 200),
-    'b': (display_width - 200 - brick_width, 200),
-    'c': (200, display_height - 200 - brick_height),
-    'd': (display_width - 200 - brick_width, display_height - 200 - brick_height)
-}
-surveillance_points_reached = set()
-
-# Set up enemies
-num_enemies = 5
-enemy_speed = 1
-enemies = []
-enemy_directions = []  # Store enemy movement directions
-for _ in range(num_enemies):
-    enemy_x = random.randint(
-        brick_width, display_width - enemy_width - brick_width)
-    enemy_y = random.randint(
-        brick_height, display_height - enemy_height - brick_height)
-    enemies.append((enemy_x, enemy_y))
-    # Randomize the initial direction
-    enemy_directions.append(random.choice([-1, 1]))
-
-# Set up the font
-font = pygame.font.Font(None, 36)
-
-# Function to draw brick borders
+import re
 
 
-def draw_brick_borders():
-    for x in range(0, display_width, brick_width):
-        display.blit(brick_image, (x, 0))
-        display.blit(brick_image, (x, display_height - brick_height))
-    for y in range(brick_height, display_height - brick_height, brick_height):
-        display.blit(brick_image, (0, y))
-        display.blit(brick_image, (display_width - brick_width, y))
+class DroneWargameEnv(gym.Env):
+    def __init__(self):
+        super(DroneWargameEnv, self).__init__()
 
-# Function to draw surveillance area points
+        # Initialize Pygame
+        pygame.init()
 
+        # Set up the display
+        display_info = pygame.display.Info()
+        self.display_width = display_info.current_w
+        self.display_height = display_info.current_h
+        self.display = pygame.display.set_mode((self.display_width, self.display_height))
 
-def draw_surveillance_points():
-    for point, coordinates in surveillance_points.items():
-        pygame.draw.rect(display, (255, 0, 0),
-                         (*coordinates, brick_width, brick_height))
+        # Define action and observation space
+        self.action_space = spaces.Discrete(4)  # up, down, left, right
+        self.observation_space = spaces.Box(low=0, high=255, shape=(80, 80, 3), dtype=np.uint8)
 
-# Function to display speed
+        # Define other attributes
+        self.drone_speed = 10
+        self.enemy_speed = 5
+        self.enemy_range = 100
+        self.drone_range = 50
+        self.start_time = None
+        self.game_time = 60
 
+        # Define drone dimensions
+        self.drone_width = 10
+        self.drone_height = 10
 
-def display_speed(speed):
-    speed_text = f"Speed: {speed:.2f} pixels/frame"
-    text_surface = font.render(speed_text, True, (255, 255, 255))
-    text_rect = text_surface.get_rect(bottomright=(
-        display_width - brick_width, display_height - brick_height))
-    display.blit(text_surface, text_rect)
+        # Define enemy dimensions
+        self.enemy_width = 10
+        self.enemy_height = 10
 
-# Function to check if all surveillance points are reached
+        # Define number of enemies
+        self.num_enemies = 5
 
+        # Define surveillance points
+        self.num_points = 5
 
-def check_surveillance_points():
-    if surveillance_points_reached == set(surveillance_points.keys()):
-        return True
-    return False
+        # Define box dimensions
+        self.box_x = 0
+        self.box_y = 0
+        self.box_width = self.display_width
+        self.box_height = self.display_height
 
+        # Define reward dimensions
+        self.reward_width = 10
+        self.reward_height = 10
 
-# Main game loop
-clock = pygame.time.Clock()
+        # Initialize drone and enemies
+        self.reset()
 
-while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+    def calculate_distance(self, x1, y1, x2, y2):
+        return ((x2 - x1)**2 + (y2 - y1)**2)**0.5
 
-    # Handle keyboard events
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_LEFT] and drone_x > brick_width:
-        drone_x -= 5
-    if keys[pygame.K_RIGHT] and drone_x < display_width - drone_width - brick_width:
-        drone_x += 5
-    if keys[pygame.K_UP] and drone_y > brick_height:
-        drone_y -= 5
-    if keys[pygame.K_DOWN] and drone_y < display_height - drone_height - brick_height:
-        drone_y += 5
+    def get_state(self):
+        # Create an empty image
+        state = np.zeros((80, 80, 3), dtype=np.uint8)
 
-    # Update the drone speed based on the arrow keys
-    if keys[pygame.K_UP] or keys[pygame.K_DOWN]:
-        drone_speed = 5.0
-    else:
-        drone_speed = 0.0
+        # Draw the drone
+        state[self.drone_y:self.drone_y+10, self.drone_x:self.drone_x+10] = [0, 255, 0]
 
-    # Clear the display
-    display.fill((0, 0, 0))
+        # Draw the enemies
+        for enemy in self.enemies:
+            state[enemy[1]:enemy[1]+10, enemy[0]:enemy[0]+10] = [255, 0, 0]
 
-    # Draw brick borders
-    draw_brick_borders()
+        # Draw the surveillance points
+        for point in self.surveillance_points.values():
+            state[point[1]:point[1]+10, point[0]:point[0]+10] = [0, 0, 255]
 
-    # Draw the drone
-    display.blit(drone_image, (drone_x, drone_y))
+        return state
 
-    # Move and draw the enemies
-    for i in range(num_enemies):
-        enemy_x, enemy_y = enemies[i]
-        enemy_direction = enemy_directions[i]
+    def step(self, action):
+        # Define the reward
+        reward = 0
 
-        # Keep enemies within the brick borders
-        if enemy_x <= brick_width or enemy_x >= display_width - enemy_width - brick_width:
-            enemy_direction *= -1
-        if enemy_y <= brick_height or enemy_y >= display_height - enemy_height - brick_height:
-            enemy_direction *= -1
+        # Define the done flag
+        done = False
 
-        enemy_x += enemy_direction * enemy_speed
-        enemy_y += enemy_direction * enemy_speed
+        # Move the drone based on the action
+        if action == 0 and self.drone_y > 0:  # up
+            self.drone_y -= self.drone_speed
+        elif action == 1 and self.drone_y < self.display_height - self.drone_height:  # down
+            self.drone_y += self.drone_speed
+        elif action == 2 and self.drone_x > 0:  # left
+            self.drone_x -= self.drone_speed
+        elif action == 3 and self.drone_x < self.display_width - self.drone_width:  # right
+            self.drone_x += self.drone_speed
 
-        display.blit(enemy_image, (enemy_x, enemy_y))
-        enemies[i] = (enemy_x, enemy_y)
-        enemy_directions[i] = enemy_direction
+        # Check if the drone is inside the surveillance box
+        if self.box_x <= self.drone_x <= self.box_x + self.box_width and self.box_y <= self.drone_y <= self.box_y + self.box_height:
+            reward = 1
 
-        # Check for collision with the drone
-        if (
-            drone_x < enemy_x + enemy_width and
-            drone_x + drone_width > enemy_x and
-            drone_y < enemy_y + enemy_height and
-            drone_y + drone_height > enemy_y
-        ):
-            # Handle collision with the enemy (game over condition)
-            print("Game Over!")
-            pygame.quit()
-            sys.exit()
+        # Move enemies
+        for enemy in self.enemies:
+            direction = random.choice(['up', 'down', 'left', 'right'])
+            if direction == 'up' and enemy[1] > 0:
+                enemy[1] -= self.enemy_speed
+            elif direction == 'down' and enemy[1] < self.display_height - self.enemy_height:
+                enemy[1] += self.enemy_speed
+            elif direction == 'left' and enemy[0] > 0:
+                enemy[0] -= self.enemy_speed
+            elif direction == 'right' and enemy[0] < self.display_width - self.enemy_width:
+                enemy[0] += self.enemy_speed
 
-    # Check if the drone has reached a surveillance point
-    for point, coordinates in surveillance_points.items():
-        if (
-            drone_x >= coordinates[0] and
-            drone_x <= coordinates[0] + brick_width and
-            drone_y >= coordinates[1] and
-            drone_y <= coordinates[1] + brick_height
-        ):
-            if point not in surveillance_points_reached:
-                surveillance_points_reached.add(point)
-                print(f"Surveillance of Point {point.upper()} Done!")
+            # Check if the enemy has detected the drone
+            if self.calculate_distance(self.drone_x, self.drone_y, enemy[0], enemy[1]) <= self.enemy_range:
+                done = True
+                reward = -1
 
-    # Check if all surveillance points are reached
-    if check_surveillance_points():
-        print("Surveillance Done! Game Won!")
+        return self.get_state(), reward, done, {}
+
+    def reset(self, _seed=None):
+        # Reset the drone position
+        self.drone_x = self.display_width // 2 - self.drone_width // 2
+        self.drone_y = self.display_height - self.drone_height - 10
+
+        # Reset the enemies
+        self.enemies = [[random.randint(0, self.display_width - self.enemy_width), random.randint(
+            0, self.display_height - self.enemy_height - 200)] for _ in range(self.num_enemies)]
+
+        # Reset the surveillance points
+        self.surveillance_points = {f'p{i}': (random.randint(self.box_x, self.box_x + self.box_width - self.reward_width), random.randint(
+            self.box_y, self.box_y + self.box_height - self.reward_height)) for i in range(self.num_points)}
+
+        # Reset the set of reached surveillance points
+        self.surveillance_points_reached = set()
+
+        # Reset the start time
+        self.start_time = pygame.time.get_ticks()
+
+        # Return the initial state
+        return self.get_state()
+
+    def render(self, mode='human'):
+        # Clear the screen
+        self.display.fill((0, 0, 0))
+
+        # Draw the drone
+        pygame.draw.circle(self.display, (0, 255, 0), (self.drone_x, self.drone_y), 10)
+
+        # Draw the enemies
+        for enemy in self.enemies:
+            pygame.draw.circle(self.display, (255, 0, 0), (enemy[0], enemy[1]), 10)
+
+        pygame.display.flip()
+
+    def close(self):
         pygame.quit()
-        sys.exit()
-
-    # Display speed
-    display_speed(drone_speed)
-
-    # Draw surveillance area points
-    draw_surveillance_points()
-
-    # Update the display
-    pygame.display.update()
-    clock.tick(30)
