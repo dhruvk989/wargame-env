@@ -14,6 +14,10 @@ display = pygame.display.set_mode(
     (display_width, display_height), pygame.FULLSCREEN)
 pygame.display.set_caption("Drone Wargame")
 
+# Load the background image
+bg_image = pygame.image.load("bg.jpg")
+bg_image = pygame.transform.scale(bg_image, (display_width, display_height))
+
 # Load images
 enemy_image = pygame.image.load("soldier.png")
 drone_image = pygame.image.load("drone.png")
@@ -54,8 +58,16 @@ drone_range_textbox = pygame_gui.elements.UITextEntryLine(
     relative_rect=pygame.Rect((display_width//2, 300), (100, 50)), manager=manager)
 time_textbox = pygame_gui.elements.UITextEntryLine(
     relative_rect=pygame.Rect((display_width//2, 350), (100, 50)), manager=manager)
+box_x_textbox = pygame_gui.elements.UITextEntryLine(
+    relative_rect=pygame.Rect((display_width//2, 400), (100, 50)), manager=manager)
+box_y_textbox = pygame_gui.elements.UITextEntryLine(
+    relative_rect=pygame.Rect((display_width//2, 450), (100, 50)), manager=manager)
+box_width_textbox = pygame_gui.elements.UITextEntryLine(
+    relative_rect=pygame.Rect((display_width//2, 500), (100, 50)), manager=manager)
+box_height_textbox = pygame_gui.elements.UITextEntryLine(
+    relative_rect=pygame.Rect((display_width//2, 550), (100, 50)), manager=manager)
 start_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect(
-    (display_width//2, 400), (100, 50)), text='Start', manager=manager)
+    (display_width//2, 600), (100, 50)), text='Start', manager=manager)
 
 # Create labels
 num_points_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
@@ -72,6 +84,14 @@ drone_range_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
     (display_width//2 - 150, 300), (150, 50)), text='Drone Range:', manager=manager)
 time_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
     (display_width//2 - 150, 350), (150, 50)), text='Game Time:', manager=manager)
+box_x_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
+    (display_width//2 - 150, 400), (150, 50)), text='Box X:', manager=manager)
+box_y_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
+    (display_width//2 - 150, 450), (150, 50)), text='Box Y:', manager=manager)
+box_width_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
+    (display_width//2 - 150, 500), (150, 50)), text='Box Width:', manager=manager)
+box_height_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect(
+    (display_width//2 - 150, 550), (150, 50)), text='Box Height:', manager=manager)
 
 # Create enemies
 num_enemies = 5
@@ -121,6 +141,10 @@ while running:
                     drone_speed = int(drone_speed_textbox.get_text())
                     drone_range = int(drone_range_textbox.get_text())
                     game_time = int(time_textbox.get_text())
+                    box_x = int(box_x_textbox.get_text())
+                    box_y = int(box_y_textbox.get_text())
+                    box_width = int(box_width_textbox.get_text())
+                    box_height = int(box_height_textbox.get_text())
                     start_time = pygame.time.get_ticks()
                     enemies = [[random.randint(0, display_width - enemy_width), random.randint(
                         0, display_height - enemy_height - 200)] for _ in range(num_enemies)]
@@ -184,7 +208,7 @@ while running:
             running = False
 
     # Draw everything
-    display.fill((0, 0, 0))  # Clear the screen
+    display.blit(bg_image, (0, 0))  # Draw the background image
     display.blit(drone_image, (drone_x, drone_y))  # Draw the drone
     for enemy in enemies:
         display.blit(enemy_image, (enemy[0], enemy[1]))  # Draw the enemies
@@ -193,8 +217,11 @@ while running:
     for point, coordinates in surveillance_points.items():
         if point not in surveillance_points_reached:
             display.blit(reward_image, coordinates)
+    # Draw the surveillance box
+    pygame.draw.rect(display, (0, 0, 0),
+                 (box_x, box_y, box_width, box_height), 2)
 
-    # Draw drone path
+   # Draw drone path
     if len(drone_path) > 1:
         pygame.draw.lines(display, (255, 0, 0), False, drone_path, 2)
 
