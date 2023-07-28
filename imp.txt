@@ -1,3 +1,125 @@
 https://we.tl/t-DvqbooEOc8
 Copy code
 tensorboard --logdir=logs
+Project Report: Drone Surveillance Game using Proximal Policy Optimization (PPO)
+1. Introduction
+This project aims to develop a drone surveillance game using reinforcement learning, specifically the Proximal Policy Optimization (PPO) algorithm. The game involves a drone navigating a field, avoiding enemies, and reaching surveillance points. The drone must reach all points within a given time frame without being detected by enemies.
+
+2. Game Environment
+The game environment was created using Pygame, a popular Python library for game development. The environment includes the drone, enemies, surveillance points, and a surveillance box. The drone's objective is to reach all surveillance points without being detected by enemies. The drone and enemies move in the environment, and their positions are updated at each step.
+
+2.1 Pygame Initialization and Display Setup
+Pygame is initialized and the display is set up to be full screen. The background image is loaded and scaled to fit the display size. The images for the drone, enemies, and reward points are also loaded and resized.
+
+python
+Copy code
+pygame.init()
+display_info = pygame.display.Info()
+display_width = display_info.current_w
+display_height = display_info.current_h
+display = pygame.display.set_mode((display_width, display_height), pygame.FULLSCREEN)
+pygame.display.set_caption("Drone Wargame")
+bg_image = pygame.image.load("bg.jpg")
+bg_image = pygame.transform.scale(bg_image, (display_width, display_height))
+2.2 GUI Elements
+The GUI elements include text entry boxes for the number of points, enemies, enemy speed, enemy range, drone speed, drone range, game time, and the dimensions of the surveillance box. There is also a start button to begin the game.
+
+python
+Copy code
+manager = pygame_gui.UIManager((display_width, display_height))
+num_points_textbox = pygame_gui.elements.UITextEntryLine(relative_rect=pygame.Rect((display_width//2, 50), (100, 50)), manager=manager)
+...
+start_button = pygame_gui.elements.UIButton(relative_rect=pygame.Rect((display_width//2, 600), (100, 50)), text='Start', manager=manager)
+2.3 Game Entities
+The drone and enemies are set up with their initial positions and properties. The surveillance points are randomly placed within the surveillance box.
+
+python
+Copy code
+drone_x = display_width // 2 - drone_width // 2
+drone_y = display_height - drone_height - 10
+drone_path = []
+...
+enemies = [[random.randint(0, display_width - enemy_width), random.randint(0, display_height - enemy_height - 200)] for _ in range(num_enemies)]
+surveillance_points = {f'p{i}': (random.randint(box_x, box_x + box_width - reward_width), random.randint(box_y, box_y + box_height - reward_height)) for i in range(num_points)}
+3. Game Loop
+The main game loop is where the game logic is implemented. It processes events, updates the game state, and renders the game to the screen.
+
+3.1 Event Processing
+The game loop processes Pygame events, such as button presses and text entry. When the start button is pressed, the game parameters are updated based on the text entry boxes, and the game is started.
+
+python
+Copy code
+for event in pygame.event.get():
+    if event.type == pygame.QUIT:
+        running = False
+    if event.type == pygame.USEREVENT:
+        if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
+            if event.ui_element == start_button:
+                ...
+                game_started = True
+                manager.clear_and_reset()
+    manager.process_events(event)
+3.2 Game State Update
+The game state is updated based on the drone's and enemies' actions. The drone's position is updated based on the chosen action, and the enemies' positions are updated randomly. The game checks if the drone has reached a surveillance point or if an enemy has detected the drone.
+
+python
+Copy code
+if game_started:
+    ...
+    drone_x += dx
+    drone_y += dy
+    ...
+    for enemy in enemies:
+        ...
+        if calculate_distance(drone_x, drone_y, enemy[0], enemy[1]) <= drone_range:
+            print(f"Drone detected enemy at ({enemy[0]}, {enemy[1]})")
+        if calculate_distance(enemy[0], enemy[1], drone_x, drone_y) <= enemy_range:
+            print(f"Game Over! Enemy detected drone at ({drone_x}, {drone_y})")
+            running = False
+            break
+    ...
+    if len(surveillance_points_reached) == len(surveillance_points):
+        print("Game Won! All surveillance points reached.")
+        running = False
+3.3 Rendering
+The game state is rendered to the screen. This includes the background, drone, enemies, surveillance points, and the surveillance box. The drone's path is also drawn.
+
+python
+Copy code
+display.blit(bg_image, (0, 0))
+display.blit(drone_image, (drone_x, drone_y))
+for enemy in enemies:
+    display.blit(enemy_image, (enemy[0], enemy[1]))
+for point, coordinates in surveillance_points.items():
+    if point not in surveillance_points_reached:
+        display.blit(reward_image, coordinates)
+pygame.draw.rect(display, (0, 0, 0), (box_x, box_y, box_width, box_height), 2)
+if len(drone_path) > 1:
+    pygame.draw.lines(display, (255, 0, 0), False, drone_path, 2)
+manager.draw_ui(display)
+4. Reinforcement Learning
+The reinforcement learning part of the project involves training a PPO model to play the game. The PPO model is trained using the Stable Baselines3 library.
+
+4.1 PPO Model
+The PPO model is loaded from a previously trained model. The model is used to predict the action to take based on the current game state.
+
+python
+Copy code
+model = PPO.load("models/best_model")
+4.2 Game Loop with RL
+The game loop with reinforcement learning is similar to the main game loop, but the action is chosen by the PPO model instead of being input by the user.
+
+python
+Copy code
+done = False
+obs = env.reset()
+while not done:
+    env.render()
+    action, _ = model.predict(obs, deterministic=True)
+    obs, reward, done, info = env.step(action)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            done = True
+env.close()
+5. Conclusion
+This project demonstrates the use of reinforcement learning, specifically the PPO algorithm, in a drone surveillance game. The drone successfully navigates the environment, avoids enemies, and reaches all surveillance points within the given time frame. The use of PPO allows the drone to learn an effective strategy for the game, demonstrating the potential of reinforcement learning in game AI.
