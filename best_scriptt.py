@@ -2,10 +2,11 @@ import pygame_gui
 import random
 import sys
 import pygame
+import csv
+import matplotlib.pyplot as plt
 
 # Initialize Pygame
 pygame.init()
-
 
 # Set up the display
 display_info = pygame.display.Info()
@@ -16,7 +17,7 @@ display = pygame.display.set_mode(
 pygame.display.set_caption("Drone Wargame")
 
 # Load the background image
-bg_image = pygame.image.load("dhr/bg.jpg")
+bg_image = pygame.image.load(r"C:\Users\dhruv kumar\Desktop\dhruv\dhr\bg.jpg")
 bg_image = pygame.transform.scale(bg_image, (display_width, display_height))
 
 # Load images
@@ -143,7 +144,10 @@ def mindset(drone_x, drone_y, surveillance_points, surveillance_points_reached, 
     # Return the new position for the drone
     return [(drone_x + dx, drone_y + dy)]
 
-
+# Open the log file
+reward_log = open('reward_log.csv', 'w', newline='')
+reward_writer = csv.writer(reward_log)
+reward_writer.writerow(['Time', 'Reward'])
 
 # Main game loop
 running = True
@@ -154,6 +158,8 @@ drone_speed = 0
 drone_range = 0
 enemy_range = 0
 game_started = False
+rewards = 0
+in_box = False
 while running:
     time_delta = clock.tick(60)/1000.0
     for event in pygame.event.get():
@@ -187,15 +193,14 @@ while running:
     manager.update(time_delta)
 
     if game_started:
-        if game_started:
         # If drone reached the current point, generate the next point
-            if not drone_path or (drone_x, drone_y) == drone_path[-1]:
-                drone_path = mindset(drone_x, drone_y, surveillance_points,
-                                 surveillance_points_reached, enemies, enemy_range)
+        if not drone_path or (drone_x, drone_y) == drone_path[-1]:
+            drone_path = mindset(drone_x, drone_y, surveillance_points,
+                             surveillance_points_reached, enemies, enemy_range)
         # If there's a path, make the drone follow the path
-            if drone_path:
-                next_point = drone_path.pop(0)
-                drone_x, drone_y = next_point
+        if drone_path:
+            next_point = drone_path.pop(0)
+            drone_x, drone_y = next_point
         # Move enemies
         for enemy in enemies:
             direction = random.choice(['up', 'down', 'left', 'right'])
@@ -216,14 +221,27 @@ while running:
             if calculate_distance(enemy[0], enemy[1], drone_x, drone_y) <= enemy_range:
                 print(
                     f"Game Over! Enemy detected drone at ({drone_x}, {drone_y})")
+                rewards -= 20  # Penalty for being detected by an enemy
                 running = False
                 break
 
+        # Check if the drone is in the surveillance box
+        if box_x <= drone_x <= box_x + box_width and box_y <= drone_y <= box_y + box_height:
+            if not in_box:
+                rewards += 10  # Reward for entering the surveillance box
+                in_box = True
+        else:
+            if in_box:
+                rewards -= 10  # Penalty for leaving the surveillance box
+                in_box = False
+
         # Check if the drone has reached a surveillance point
         for point, coordinates in surveillance_points.items():
-            if calculate_distance(drone_x, drone_y, coordinates[0], coordinates[1]) <= drone_range:
+            distance = calculate_distance(drone_x, drone_y, coordinates[0], coordinates[1])
+            if distance <= drone_range:
                 if point not in surveillance_points_reached:
                     surveillance_points_reached.add(point)
+                    rewards += 10  # Reward for completing a surveillance point
                     print(f"Surveillance of Point {point.upper()} Done!")
 
         # Check if all surveillance points are reached
@@ -277,5 +295,28 @@ while running:
         display.blit(enemy_coordinates_surface, (10, 40 + i*30))
 
     pygame.display.flip()
+
+    # Log the current reward
+    reward_writer.writerow([pygame.time.get_ticks() / 1000, rewards])  # Convert time to seconds
+
+# Close the log file
+reward_log.close()
+
+# Load the rewards from the log file
+rewards = []
+times = []
+with open('reward_log.csv', 'r') as f:
+    reader = csv.reader(f)
+    next(reader)  # Skip the header
+    for row in reader:
+        times.append(float(row[0]))
+        rewards.append(int(row[1]))
+
+# Plot the rewards
+plt.plot(times, rewards)
+plt.xlabel('Time (s)')
+plt.ylabel('Reward')
+plt.title('Reward over time')
+plt.show()
 
 pygame.quit()
