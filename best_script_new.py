@@ -103,6 +103,7 @@ for _ in range(num_enemies):
     enemy = [random.randint(0, display_width - enemy_width), random.randint(0, display_height - enemy_height - 200)]
     enemy.append(0)  # Add a counter for each enemy
     enemy.append('up')  # Initial direction for each enemy
+    enemy.append([0, 0])  # Add a direction vector for each enemy
     enemies.append(enemy)
 
 # Set up the surveillance points
@@ -125,13 +126,14 @@ def calculate_direction(current_x, current_y, target_x, target_y, enemies, safe_
     dy = target_y - current_y
 
     for enemy in enemies:
-        enemy_x, enemy_y, _ ,_  = enemy
+        enemy_x, enemy_y, _, _, _ = enemy  # Add an extra underscore for the direction vector
         distance_to_enemy = calculate_distance(current_x, current_y, enemy_x, enemy_y)
         if distance_to_enemy < safe_distance:
             dx -= (enemy_x - current_x)
             dy -= (enemy_y - current_y)
 
     return dx, dy
+
 
 def mindset(drone_x, drone_y, surveillance_points, surveillance_points_reached, enemies, enemy_range):
     # Choose the closest surveillance point that hasn't been reached yet as the new target
@@ -187,7 +189,7 @@ while running:
                     box_height = int(box_height_textbox.get_text())
                     start_time = pygame.time.get_ticks()
                     enemies = [[random.randint(0, display_width - enemy_width), random.randint(
-                        0, display_height - enemy_height - 200), 0, 'up'] for _ in range(num_enemies)]
+                        0, display_height - enemy_height - 200), 0, 'up', [0, 0]] for _ in range(num_enemies)]
                     surveillance_points = {f'p{i}': [random.randint(box_x, box_x + box_width - reward_width), random.randint(
                         box_y, box_y + box_height - reward_height)] for i in range(num_points)}
                     game_started = True
@@ -210,18 +212,22 @@ while running:
         for enemy in enemies:
             enemy[2] += 1  # Increment the counter
             if enemy[2] >= 60:  # Change direction every 60 frames (1 second at 60 FPS)
-                enemy[3] = random.choice(['up', 'down', 'left', 'right'])
+                # Calculate the direction towards the drone
+                dx = drone_x - enemy[0]
+                dy = drone_y - enemy[1]
+                length = (dx**2 + dy**2)**0.5
+                dx /= length
+                dy /= length
+
+                # Update the direction vector
+                enemy[4][0] = 0.9 * enemy[4][0] + 0.1 * dx
+                enemy[4][1] = 0.9 * enemy[4][1] + 0.1 * dy
+
                 enemy[2] = 0  # Reset the counter
 
-            direction = enemy[3]
-            if direction == 'up' and enemy[1] > 0:
-                enemy[1] -= enemy_speed
-            elif direction == 'down' and enemy[1] < display_height - enemy_height:
-                enemy[1] += enemy_speed
-            elif direction == 'left' and enemy[0] > 0:
-                enemy[0] -= enemy_speed
-            elif direction == 'right' and enemy[0] < display_width - enemy_width:
-                enemy[0] += enemy_speed
+            # Move the enemy in the direction of the direction vector
+            enemy[0] += enemy_speed * enemy[4][0]
+            enemy[1] += enemy_speed * enemy[4][1]
 
             # Check if the drone has detected an enemy
             if calculate_distance(drone_x, drone_y, enemy[0], enemy[1]) <= drone_range:
@@ -258,6 +264,8 @@ while running:
         if len(surveillance_points_reached) == len(surveillance_points):
             print("Game Won! All surveillance points reached.")
             running = False
+        current_time = (pygame.time.get_ticks() - start_time) / 1000  # Convert milliseconds to seconds
+        reward_writer.writerow([current_time, rewards])    
 
     # Draw everything
     display.blit(bg_image, (0, 0))  # Draw the background image
@@ -282,14 +290,16 @@ while running:
 reward_log.close()
 
 # Plot the reward over time
-reward_data = []
+rewards = []
+times = []
 with open('reward_log.csv', 'r') as f:
     reader = csv.reader(f)
     next(reader)  # Skip the header
     for row in reader:
-        reward_data.append(int(row[1]))
+        times.append(float(row[0]))
+        rewards.append(int(row[1]))
 
-plt.plot(reward_data)
+plt.plot(times, rewards)
 plt.title('Reward Over Time')
 plt.xlabel('Time (s)')
 plt.ylabel('Reward')
