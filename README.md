@@ -1,1 +1,3 @@
 # wargame-env
+The goal of this project is to develop a drone surveillance game using reinforcement learning, specifically the Proximal Policy Optimization (PPO) algorithm. The game involves a drone navigating a field, avoiding enemies, and reaching surveillance points. The drone must reach all points within a given time frame without being detected by enemies.
+The challenge lies in training the drone to learn an optimal policy that balances efficient surveillance of points with avoiding detection, considering the continuous action space, stochastic environment, and partial observability. The objective is to create an AI-driven drone agent capable of successfully completing the surveillance task in a visually rich and dynamically changing environment.
